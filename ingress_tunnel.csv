@@ -1,0 +1,5 @@
+DestIP,TunnelNamePrefix,TunnelCount,TunnelType,TunnelDir,ExplicitPath,AutoBackup,BfdMonitor,BfdProfile,LspReopt,LspReoptInterval,fwdTunnelPrefix,ReversedTunnelPrefix
+1.1.1.1,dyn-corout,0,dynamic,bidirectional,,enabled,enabled,bdd10msec,disabled,30
+1.1.1.1,i-dyn-unidir,10,dynamic,unidirectional,,disabled,disabled,,disabled,0
+1.1.1.1,i-sta-assoc,10,static,associated,,disabled,enabled,,disabled,0,i-dyn-unidir,e-dyn-unidir
+1.1.1.1,sta-corout,0,static,bidirectional,,enabled,enabled,bdd10msec,disabled,30

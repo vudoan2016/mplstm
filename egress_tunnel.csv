@@ -1,0 +1,8 @@
+DestIP,TunnelNamePrefix,TunnelCount,TunnelType,TunnelDir,ExplicitPath,AutoBackup,BfdMonitor,BfdProfile,LspReopt,LspReoptInterval,fwdTunnelPrefix,ReversedTunnelPrefix
+3.3.3.3,e-dyn-unidir,0,dynamic,unidirectional,,disabled,disabled,,disabled,0
+3.3.3.3,e-sta-assoc,0,static,associated,,disabled,enabled,,disabled,0,e-dyn-unidir,i-dyn-unidir
+
+
+
+
+
