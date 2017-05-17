@@ -1,0 +1,25 @@
+Python 
+  - class 
+  inheritance. Multiple inheritance?
+  - thread synchronization using Queue
+    - thread safety using lock primitive
+    - re-entrancy
+  - simple regex
+  - csv file processing (read/write)
+  - dictionary {}
+  - list []
+  - tuple: immutable.
+  - set {}: Can't index set.
+  - global variables
+  - pexpect spawning telnet session
+  - enum
+  does it have the limitation of 32 values?
+  - string comparision '==.' What about 'is?'
+  - mmap can be used to reduce memeory usage
+  - sample scripts 
+  scripts src/software/saos-tce/apps/saos-tce/le-os/common/src/genericSwitch/optif/scripts
+Git
+git commit -m "Add existing file"
+git add
+git commit 
+git push origin master
