@@ -7,19 +7,19 @@ import csv
 import telnet
 import re
 import globals
-from enum import Enum
+from enum import IntEnum
 
-class Direction(Enum):
+class Direction(IntEnum):
     UNIDIRECTIONAL = 1
     BIDIRECTIONAL  = 2
 
-class TnnlType(Enum):
-    DYNAMIC_COROUT = 1
-    DYNAMIC_UNIDIR = 2
-    STATIC_COROUT  = 3
-    STATIC_ASSOC   = 4
+class TnnlType(IntEnum):
+    DYNAMIC_COROUT = 0
+    DYNAMIC_UNIDIR = 1
+    STATIC_COROUT  = 2
+    STATIC_ASSOC   = 3
 
-class TnnlOperation(Enum):
+class TnnlOperation(IntEnum):
     CREATE_TUNNEL   = 1
     UPDATE_LABEL    = 2
     VERIFY_LABEL    = 3
@@ -28,19 +28,22 @@ class TnnlOperation(Enum):
     VERIFY_TNNL_GRP = 6
     CREATE_REPORT   = 7
     PERFORM_HA      = 8
-    VERIFY_ALL      = 9
+    DELETE_TUNNEL   = 9
+    VERIFY_ALL      = 10
+
+tunnelType = ["Dynamic|Bidir", "Dynamic|Unidir", "Static|Bidir", "Static|Assoc"]
 
 class TnnlDB(threading.Thread):
     """
     """
-    def __init__(self, cfgFile, telnetSession, reportFile=None):
+    def __init__(self, name, cfgFile, telnetSession, reportFile=None):
         threading.Thread.__init__(self)
+        self.name = name
         self.setDaemon(1)
         self.workRequestQ = Queue.Queue()
         self.cfgFile = cfgFile
         self.reportFile = reportFile
-        self.telnetSession = telnetSession
-        self.tnnlCount = 0
+        self.ts = telnetSession
         self.cfg = [] # list of configuration parameters
         self.tunnels = {} # dictionary of tunnels
         self._readCfg()
@@ -49,156 +52,176 @@ class TnnlDB(threading.Thread):
         tnnlCfgFile = open(self.cfgFile)
         csvReader = csv.reader(tnnlCfgFile)
         next(csvReader, None)
-        self.cfg = [tuple(row) for row in csvReader]
+        for row in csvReader:
+            if not len(row):
+                continue
+            path = backup = bfd = bfdProfile = reopt = fwdTnnl = reversedTnnl = ""
+            if row[3] == "dynamic" and row[4] == "bidirectional":
+                tnnlTypeStr = "rsvp-ingress-corout"
+                tnnlType = TnnlType.DYNAMIC_COROUT
+            if row[3] == "dynamic" and row[4] == "unidirectional":
+                tnnlType = TnnlType.DYNAMIC_UNIDIR
+                tnnlTypeStr = "rsvp-ingress-unidir"
+            if row[3] == "static" and row[4] == "bidirectional":
+                tnnlType = TnnlType.STATIC_COROUT
+                tnnlTypeStr = "static-ingress-corout"
+            if row[3] == "static" and row[4] == "associated":
+                tnnlType = TnnlType.STATIC_ASSOC
+                tnnlTypeStr = "static-ingress-assoc"
+            if row[5]:
+                path = " explicit-tunnel-path " + row[5]
+            if row[6] == "enabled":
+                backup = " auto-backup on" 
+            if row[7] == "enabled":
+                bfd = " bfd-monitor enable"
+            if row[8]:
+                bfdProfile = " bfd-profile " + row[8]
+            if row[9] == "enabled":
+                reopt = " lsp-reopt enable lsp-reopt-interval " + row[10]
+            if row[11]:
+                fwdTnnl = " forward-tunnel " + row[11]
+            if row[12]:
+                reversedTnnl = " reverse-dyntun-name " + row[12]
+
+            self.cfg.append(tuple((row[0], row[1], int(row[2]), tnnlType, 
+                                   tnnlTypeStr, path, backup, bfd, bfdProfile, 
+                                   reopt, fwdTnnl, reversedTnnl)))
         tnnlCfgFile.close()
 
-    def _createFromCfg(self, cfg):
-        fwdTnnl = reversedTnnl = ""
-        assocTnnl = False
-
-        if cfg[3] == "dynamic" and cfg[4] == "bidirectional":
-            tnnlTypeStr = "rsvp-ingress-corout"
-            tnnlType = TnnlType.DYNAMIC_COROUT
-        elif cfg[3] == "dynamic" and cfg[4] == "unidirectional":
-            tnnlType = TnnlType.DYNAMIC_UNIDIR
-            tnnlTypeStr = "rsvp-ingress-unidir"
-        elif cfg[3] == "static" and cfg[4] == "bidirectional":
-            tnnlType = TnnlType.STATIC_COROUT
-            tnnlTypeStr = "static-ingress-corout"
-        elif cfg[3] == "static" and cfg[4] == "associated":
-            tnnlType = TnnlType.STATIC_ASSOC
-            assocTnnl = True
-            tnnlTypeStr = "static-ingress-assoc"
-            fwdTnnl = " forward-tunnel "
-            reversedTnnl = " reverse-dyntun-name "
-
-        tnnlCnt = int(cfg[2])
-        destIP = cfg[0]
-        for i in range(1, tnnlCnt+1):
+    def _createFromCfg(self, cfg, existingTnnls):
+        for i in range(1, cfg[2]+1):
             tnnlName = cfg[1] + str(i) 
-            cmd = "gmpls tp-tunnel create " + tnnlTypeStr + " " + tnnlName
-            if assocTnnl:
-                cmd += fwdTnnl + cfg[11] + str(i) + reversedTnnl + cfg[12] + str(i)
+            if tnnlName in existingTnnls:
+                self.tunnels[tnnlName] = [cfg[3], -1, -1, "N/A", "N/A", 
+                                          "N/A", "N/A", cfg[4]]
+                continue
+            
+            cmd = "gmpls tp-tunnel create " + cfg[4] + " " + tnnlName
+            if cfg[3] == TnnlType.STATIC_ASSOC:
+                cmd += cfg[10] + str(i) + cfg[11] + str(i)
             else:
-                cmd += " dest-ip " + destIP
+                cmd += " dest-ip " + cfg[0]
 
-            if cfg[5]:
-                cmd += " explicit-tunnel-path " + self.path
-            if cfg[6] == "enabled":
-                cmd += " auto-backup on" 
-            if cfg[7] == "enabled":
-                cmd += " bfd-monitor enable"
-            if cfg[8]:
-                cmd += " bfd-profile " + self.bfdProfile
-            if cfg[9] == "enabled":
-                cmd += " lsp-reopt enable lsp-reopt-interval " + cfg[10]
-
-            result = self.telnetSession.writeCmd(cmd)
+            cmd += cfg[5] + cfg[6] + cfg[7] + cfg[8] + cfg[9]
+            result = self.ts.writeCmd(cmd)
             if "FAILURE" in result:
-                logging.debug(cmd)
                 print(result)
             else:
-                self.tnnlCount += 1
-                self.tunnels[tnnlName] = [tnnlType, -1, -1, "N/A", "N/A", "N/A"]
+                self.tunnels[tnnlName] = [cfg[3], -1, -1, "N/A", "N/A", 
+                                          "N/A", "N/A", cfg[4]]
 
-    def _create(self):
+    def _getExistingTnnl(self):
+        tpTnnl = self.ts.writeCmd("gmpls tp-tunnel show")
+        assocTnnl = self.ts.writeCmd("gmpls tp-tunnel show matching-assoc")
+        return tpTnnl + assocTnnl
+
+    def _create(self, resultQ):
+        existingTnnls = self._getExistingTnnl()
+
         for cfg in self.cfg:
             if len(cfg):
-                self._createFromCfg(cfg)
-        globals.pvcDB.create()
-        time.sleep(10)
-        self.workRequestQ.put(TnnlOperation.UPDATE_LABEL)
+                self._createFromCfg(cfg, existingTnnls)
 
-    def create(self):
-        self.workRequestQ.put(TnnlOperation.CREATE_TUNNEL)
+        resultQ.put(globals.CfgResult.CFG_TUNNEL_DONE)
+        time.sleep(5)
+        self.workRequestQ.put((TnnlOperation.UPDATE_LABEL, None))
 
-    def _delete(self, cfg):
-        if cfg[3] == "dynamic" and cfg[4] == "bidirectional":
-            tnnlTypeStr = "rsvp-ingress-corout"
-        elif cfg[3] == "dynamic" and cfg[4] == "unidirectional":
-            tnnlTypeStr = "rsvp-ingress-unidir"
-        elif cfg[3] == "static" and cfg[4] == "bidirectional":
-            tnnlTypeStr = "static-ingress-corout"
-        elif cfg[3] == "static" and cfg[4] == "associated":
-            tnnlTypeStr = "static-ingress-assoc"
-        tnnlCnt = int(cfg[2])
+    def create(self, resultQ):
+        self.workRequestQ.put((TnnlOperation.CREATE_TUNNEL, resultQ))
 
-        for i in range(1, tnnlCnt+1):
-            tnnlName = cfg[1] + str(i) 
-            cmd = "gmpls tp-tunnel delete " + tnnlTypeStr + " " + tnnlName
-            result = self.telnetSession.writeCmd(cmd)
-            if "FAILURE" in result:
-                logging.debug(cmd)
-                print(result)
-            else:
-                if tnnlName in self.tunnels:
-                    del self.tunnels[tnnlName]
-                self.tnnlCount -= 1
     def _HA(self):
         cmd = "module high-avail switchover-to-standby"
-        result = self.telnetSession.writeCmd(cmd)
+        result = self.ts.writeCmd(cmd)
         time.sleep(3*60)
-        self.telnetSession.connect()
+        self.ts.connect()
         while True:
-            result = self.telnetSession.writeCmd("module show")
+            result = self.ts.writeCmd("module show")
             regex = re.compile(r'CTX\s*\|\s*Enabled\s*\|\s*Enabled\s*')
             matchObj = regex.findall(result)
             if len(matchObj) == 2:
-                self.workRequestQ.put(TnnlOperation.VERIFY_LABEL)
+                self.workRequestQ.put((TnnlOperation.VERIFY_LABEL, None))
+                self.workRequestQ.put((TnnlOperation.VERIFY_PING, None))
+                self.workRequestQ.put((TnnlOperation.VERIFY_BFD, None))
+                self.workRequestQ.put((TnnlOperation.CREATE_REPORT, None))
                 break
             else:
-                time.sleep(30)
+                time.sleep(5)
 
     def HA(self):
-        self.workRequestQ.put(TnnlOperation.PERFORM_HA)
+        self.workRequestQ.put((TnnlOperation.PERFORM_HA, None))
 
     def _report(self):
         if self.reportFile is not None:
             f = open(self.reportFile, "w")
             try:
                 writer = csv.writer(f)
-                writer.writerow(("Tunnel", "TnnlType", "Fwd-out-lbl", "Reversed-in-lbl", "Ping", "BFD", "Lbl-Recovery"))
-                for tunnel, attrs in self.tunnels.items():
-                    writer.writerow((tunnel, attrs[0], attrs[1], attrs[2], attrs[3], attrs[4], attrs[5]))
+                f.write("Tunnel = " + str(len(self.tunnels)) + "\n")
+                writer.writerow(("Tunnel", "TnnlType", "Fwd-out-lbl", "Reversed-in-lbl", 
+                                 "Ping", "BFD", "Lbl-Recovery", "Tnnl-Grp"))
+                for tunnel, attrs in sorted(self.tunnels.items()):
+                    writer.writerow((tunnel, tunnelType[attrs[0]], attrs[1], 
+                                     attrs[2], attrs[3], attrs[4], attrs[5], 
+                                     attrs[6]))
             finally:
                 f.close()
 
     def report(self):
-        self.workRequestQ.put(TnnlOperation.CREATE_REPORT)
+        self.workRequestQ.put((TnnlOperation.CREATE_REPORT, None))
  
+    def _delete(self):
+        # delete associated tunnels first
+        for tunnel, attrs in self.tunnels.items():
+            if attrs[0] == TnnlType.STATIC_ASSOC:
+                cmd = "gmpls tp-tunnel delete " + attrs[7] + " " + tunnel
+                result = self.ts.writeCmd(cmd)
+                if "FAILURE" in result:
+                    print(result)
+                else:
+                    self.tunnels.pop(tunnel)
+            
+        for tunnel, attrs in self.tunnels.items():
+            cmd = "gmpls tp-tunnel delete " + attrs[7] + " " + tunnel
+            result = self.ts.writeCmd(cmd)
+            if "FAILURE" in result:
+                print(result)
+            else:
+                self.tunnels.pop(tunnel)
+
     def delete(self):
-        for cfg in self.cfg:
-            self._delete(cfg)
+        self.workRequestQ.put((TnnlOperation.DELETE_TUNNEL, None))
 
     def _verifyPing(self):
+        logging.debug("Verifying mpls ping ...")
         exp = "1 packets transmitted, 1 packets received"
         for tunnel, attrs in self.tunnels.items():
             if attrs[0] == TnnlType.STATIC_ASSOC:
                 cmd = "mpls ping assoc-tp-lsp " + tunnel + " count 1"
-                result = self.telnetSession.writeCmd(cmd)
+                result = self.ts.writeCmd(cmd)
                 if exp in result:
                     attrs[3] = "Pass"
                 else:
                     attrs[3] = "Fail"
 
     def _verifyBFD(self):
+        logging.debug("Verifying bfd over mpls ...")
         for tunnel, attrs in self.tunnels.items():
             if attrs[0] == TnnlType.STATIC_ASSOC:
                 cmd = "bfd session show tunnel tp-assoc " + tunnel
-                result = self.telnetSession.writeCmd(cmd)
+                result = self.ts.writeCmd(cmd)
                 if "Session operationally up" in result:
                     attrs[4] = "Up"
                 else:
                     attrs[4] = "Down"
 
     def _verifyLblRecovery(self):
+        logging.debug("Verifying label recovering ...")
         for tunnel, attrs in self.tunnels.items():
             if attrs[0] == TnnlType.DYNAMIC_UNIDIR:
                 cmd = "gmpls tp-tunnel show rsvp-ingress-unidir " + tunnel
-                result = self.telnetSession.writeCmd(cmd)
+                result = self.ts.writeCmd(cmd)
                 # Extract the label from the output:
                 #|Forward Out-Label                    |100001
-                searchObj = re.search(r'Forward\sOut-Label\s+\|\d+', result)
+                searchObj = re.search(r'Forward Out-Label\s+\|\d+', result)
                 if searchObj:
                     if attrs[1] == searchObj.group(0).split('|')[1]:
                         attrs[5] = "Pass"
@@ -206,25 +229,66 @@ class TnnlDB(threading.Thread):
                         attrs[5] = "Fail"
 
     def _updateLabel(self):
+        logging.debug("Updating labels ...")
         for tunnel, attrs in self.tunnels.items():
             if attrs[0] == TnnlType.DYNAMIC_UNIDIR:
                 cmd = "gmpls tp-tunnel show rsvp-ingress-unidir " + tunnel
-                result = self.telnetSession.writeCmd(cmd)
+                result = self.ts.writeCmd(cmd)
                 # Extract the label from the output:
                 #|Forward Out-Label                    |100001
-                searchObj = re.search(r'Forward\sOut-Label\s+\|\d+', result)
+                searchObj = re.search(r'Forward Out-Label\s+\|\d+', result)
                 if searchObj:
                     attrs[1] = searchObj.group(0).split('|')[1]
 
         # Ready to verify MPLS ping
-        self.workRequestQ.put(TnnlOperation.VERIFY_PING)
-        self.workRequestQ.put(TnnlOperation.VERIFY_BFD)
+        self.workRequestQ.put((TnnlOperation.VERIFY_PING, None))
+        self.workRequestQ.put((TnnlOperation.VERIFY_BFD, None))
+        self.workRequestQ.put((TnnlOperation.VERIFY_TNNL_GRP, None))
+
+    def _getStdbyCTXSession(self):
+        result = self.ts.writeCmd("module show slot CTX1.ctm")
+        searchObj = re.search(r'Protection Status\s+\| Primary', result)
+        stdbyCTX = telnet.TelnetSession(sys.argv[1], globals.user, 
+                                        globals.password)
+        if searchObj:
+            stdbyCTXSlot = "32"
+        else:
+            stdbyCTXSlot = "31"
+        stdbyCTX.writeCmd("diag shell")
+        stdbyCTX.pe.sendline("slot " + stdbyCTXSlot)
+        stdbyCTX.pe.expect("login:")
+        stdbyCTX.pe.sendline (globals.user)
+        stdbyCTX.pe.expect ('Password:')
+        stdbyCTX.pe.sendline (globals.password)
+        stdbyCTX.pe.expect (">")
+        stdbyCTX.writeCmd("diag shell")
+        return stdbyCTX
+        
+    def _verifyTnnlGrp(self):
+        logging.debug("Verifying tunnel groups ...")
+        cmd = "mplstm show tunnel "
+        stdbyCTX = self._getStdbyCTXSession()
+        self.ts.writeCmd("diag shell")
+        
+        for tunnel, attrs in self.tunnels.items():
+            if attrs[0] == TnnlType.STATIC_ASSOC:
+                continue
+            stdbyResult = stdbyCTX.writeCmd(cmd + tunnel)
+            stdbySearchObj = re.search(r'Tunnel Group Index\s+\|\d+', stdbyResult)
+            result = self.ts.writeCmd(cmd + tunnel)
+            searchObj = re.search(r'Tunnel Group Index\s+\|\d+', result)
+            attrs[6] = "Fail"
+            if stdbySearchObj and searchObj:
+                if stdbySearchObj.group(0) == searchObj.group(0):
+                    attrs[6] = "Pass"
+        self.ts.writeCmd("exit")
+        stdbyCTX.pe.close()
 
     def run(self):
         while 1:
-            q = self.workRequestQ.get()
+            q, resultQ = self.workRequestQ.get()
             if q == TnnlOperation.CREATE_TUNNEL:
-                self._create()
+                self._create(resultQ)
             if q == TnnlOperation.UPDATE_LABEL:
                 self._updateLabel()
             elif q == TnnlOperation.VERIFY_PING:
@@ -237,3 +301,7 @@ class TnnlDB(threading.Thread):
                 self._verifyLblRecovery()
             elif q == TnnlOperation.PERFORM_HA:
                 self._HA()
+            elif q == TnnlOperation.VERIFY_TNNL_GRP:
+                self._verifyTnnlGrp()
+            elif q == TnnlOperation.DELETE_TUNNEL:
+                self._delete()

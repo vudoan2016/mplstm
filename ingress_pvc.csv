@@ -1,3 +1,3 @@
 DestIP,PVCNamePrefix,PVCCount,PVCType,PVC/tunnel,TunnelType,TunnelPrefix
-1.1.1.1,dvc,0,dynamic,1,dynamic-corout,dyn-corout
-1.1.1.1,dvc,10,dynamic,1,static-associated,i-sta-assoc
+3.3.3.3,dvc,0,dynamic,1,dynamic-corout,dyn-corout,vs-mpls
+3.3.3.3,dvc,1,dynamic,1,static-associated,i-sta-assoc,vs-mpls

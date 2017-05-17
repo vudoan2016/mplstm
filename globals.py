@@ -1,17 +1,14 @@
-import sys
-import telnet
-import pvc
-import tunnel
-import vs
+from enum import Enum
+
 user = "gss"
 password = "pureethernet"
-pvcCfgFile = "ingress_pvc.csv"
-egressTnnlCfgFile = "egress_tunnel.csv"
-vsCfgFile = "ingress_vs.csv"
-ingressTnnlCfgFile = "ingress_tunnel.csv"
-reportFile = "ingress_report.txt"
 
-ingressSession = telnet.TelnetSession(sys.argv[1], user, password)
-iTnnlDB = tunnel.TnnlDB(ingressTnnlCfgFile, ingressSession, reportFile)
-pvcDB = pvc.PvcDB(pvcCfgFile, ingressSession)
-vsDB = vs.vs(vsCfgFile, ingressSession)
+class CfgResult(Enum):
+    CFG_VS_DONE      = 1
+    CFG_PVC_DONE     = 2
+    CFG_TUNNEL_DONE  = 3
+    DETACH_PVC_DONE  = 4
+    DELETE_PVC_DONE  = 5
+     
+
+
