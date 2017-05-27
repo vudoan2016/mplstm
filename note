@@ -1,23 +1,29 @@
 Python 
   - class 
-  inheritance. Multiple inheritance?
+    inheritance. Multiple inheritance?
+    parent class? 
+    has-a vs is-a relationship
   - thread synchronization using Queue
-    - thread safety using lock primitive
-    - re-entrancy
+  - thread safety using lock primitive
+  - re-entrancy
   - simple regex
-  - csv file processing (read/write)
-  - dictionary {}
+  - csv file processing (read/write with format)
+  - dictionary {}. delete element in a loop
   - list []
-  - tuple: immutable.
+  - tuple: immutable & use ()
   - set {}: Can't index set.
   - global variables
   - pexpect spawning telnet session
   - enum
-  does it have the limitation of 32 values?
+    does it have the limitation of 32 values?
   - string comparision '==.' What about 'is?'
   - mmap can be used to reduce memeory usage
   - sample scripts 
-  scripts src/software/saos-tce/apps/saos-tce/le-os/common/src/genericSwitch/optif/scripts
+    scripts src/software/saos-tce/apps/saos-tce/le-os/common/src/genericSwitch/optif/scripts
+  - profiling
+  - debugging
+  - hardoop
+
 Git
 git commit -m "Add existing file"
 git add

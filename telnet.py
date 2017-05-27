@@ -1,11 +1,8 @@
 import pexpect
-import telnetlib
-import globals
 import logging
 import threading
 import re
 
-l = threading.Lock()
 logging.basicConfig(filename='ingress.log', level=logging.DEBUG, 
                     format='%(asctime)s,%(threadName)-10s: %(message)s')
 logger = logging.getLogger(__name__)
@@ -18,10 +15,13 @@ class TelnetSession:
         self.user = user
         self.password = password
         self._login()
+        self.l = threading.Lock()
         self._getHostName()
 
     def writeCmd(self, cmd):
-        l.acquire()
+        # logging.debug(cmd)
+        self.l.acquire()
+        # cmd = '\n'
         self.pe.sendline(cmd)
         try:
             self.pe.expect (self.prompt)
@@ -29,8 +29,8 @@ class TelnetSession:
             logging.debug("Exception: cmd:" + cmd)
             logging.debug(str(self.pe))
         result = self.pe.before
-        l.release()
         logging.debug(result)
+        self.l.release()
         return result
 
     def connect(self):

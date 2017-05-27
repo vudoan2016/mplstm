@@ -1,3 +1,5 @@
-DestIP,PVCNamePrefix,PVCCount,PVCType,PVC/tunnel,TunnelType,TunnelPrefix
-3.3.3.3,dvc,0,dynamic,1,dynamic-corout,dyn-corout,vs-mpls
-3.3.3.3,dvc,1,dynamic,1,static-associated,i-sta-assoc,vs-mpls
+DestIP,PVCNamePrefix,PVCCount,PVCType,PVC/tunnel,TunnelType,TunnelPrefix,vsPrefix,fec-129,agi,saii,taii,status-tlv,bw
+1.1.1.1,a-b,5,dynamic,1,te,te-a-b,vs100,enabled,10,A2,A4,enabled,1000
+3.3.3.3,grp-dvc,0,dynamic,1,static-associated,i-sta-grp-assoc,vs-grp-mpls,disabled,,,,enabled,1000
+3.3.3.3,dvc,0,dynamic,1,static-associated,i-sta-assoc,vs-mpls,disabled,,,,enabled,1000
+3.3.3.3,dyn-dvc,0,dynamic,1,dynamic-corout,dyn-corout,vs-mpls,disabled,,,,enabled,1000

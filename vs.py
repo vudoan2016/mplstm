@@ -1,8 +1,9 @@
-import sys
 import threading
 import csv
 import Queue
 import globals
+import logging
+import chassis
 from enum import Enum
 
 class VirtualSwitchWorkReq(Enum):
@@ -19,6 +20,26 @@ class vs(threading.Thread):
         self.workRequestQ = Queue.Queue()
         self.vs = {} # dictionary of all virtual-switches
         self._readCfg()
+
+    def create(self, resultQ):
+        self.workRequestQ.put((VirtualSwitchWorkReq.VS_CREATE_REQ, resultQ))
+
+    def _delete(self):
+        for vs in self.vs.keys():
+            cmd = "virtual-switch delete vs " + vs
+            result = self.ts.writeCmd(cmd)
+            del self.vs[vs]
+
+    def delete(self):
+        self.workRequestQ.put((VirtualSwitchWorkReq.VS_DELETE_REQ, None))
+
+    def run(self):
+        while 1:
+            q, resultQ = self.workRequestQ.get()
+            if q == VirtualSwitchWorkReq.VS_CREATE_REQ:
+                self._create(resultQ)
+            elif q == VirtualSwitchWorkReq.VS_DELETE_REQ:
+                self._delete()
 
     def _readCfg(self):
         cfgFile = open(self.cfgFile)
@@ -42,28 +63,9 @@ class vs(threading.Thread):
         return self.ts.writeCmd("virtual-switch show")
 
     def _create(self, resultQ):
+        logging.debug("Start creating virtual-switches ...")
         existingVS = self._getExistingVS()
         for cfg in self.cfg:
             if len(cfg):
                 self._createFromCfg(cfg, existingVS)
-        resultQ.put(globals.CfgResult.CFG_VS_DONE)
-                
-    def create(self, resultQ):
-        self.workRequestQ.put((VirtualSwitchWorkReq.VS_CREATE_REQ, resultQ))
-
-    def _delete(self):
-        for vs in self.vs:
-            cmd = "virtual-switch delete vs " + vs
-            result = self.ts.writeCmd(cmd)
-            self.vs.pop(vs)
-
-    def delete(self):
-        self.workRequestQ.put((VirtualSwitchWorkReq.VS_DELETE_REQ, None))
-
-    def run(self):
-        while 1:
-            q, resultQ = self.workRequestQ.get()
-            if q == VirtualSwitchWorkReq.VS_CREATE_REQ:
-                self._create(resultQ)
-            elif q == VirtualSwitchWorkReq.VS_DELETE_REQ:
-                self._delete()
+        resultQ.put(globals.ConfigResult.VS_CFG_DONE)

@@ -1,4 +1,5 @@
-Tunnel = 2
+Tunnel = 1
+GR tunnel recovery: Fail
+GR audit result: Fail
 Tunnel,TnnlType,Fwd-out-lbl,Reversed-in-lbl,Ping,BFD,Lbl-Recovery,Tnnl-Grp
-i-dyn-unidir1,Dynamic|Unidir,100000,-1,N/A,N/A,Pass,Pass
-i-sta-assoc1,Static|Assoc,-1,-1,Pass,Up,N/A,N/A
+i-dyn-te1,TnnlType.TE_DYNAMIC_UNIDIR,-1,-1,N/A,N/A,N/A,N/A,rsvp-ingress
