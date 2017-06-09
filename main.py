@@ -5,7 +5,6 @@ import globals
 import chassis
 import tunnel
 import pvc
-import vs
 import telnet
 import Queue
 import time
@@ -13,41 +12,35 @@ import time
 pvcCfgFile = 'ingress_pvc.csv'
 egressTnnlCfgFile = 'egress_tunnel.csv'
 egressPvcCfgFile = 'egress_pvc.csv'
-egressVsCfgFile = 'egress_vs.csv'
-vsCfgFile = 'ingress_vs.csv'
 ingressTnnlCfgFile = 'ingress_tunnel.csv'
 connFile = 'connection.csv'
 iReport = 'report.txt'
 
 resultQ = Queue.Queue()
-ts = iTnnlDB = pvcDB = vsDB = None
-eTs = eTnnlDB = ePvcDB = eVsDB = None
+ts = iTnnlDB = pvcDB = None
+eTs = eTnnlDB = ePvcDB = None
 xTs = None
 iChassis = eChassis = xChassis = None
 
 def initGlobals():
-    global ts, iTnnlDB, pvcDB, vsDB, iChassis
+    global ts, iTnnlDB, pvcDB, iChassis
 
     ts = telnet.TelnetSession(sys.argv[1], globals.user, globals.password)
     iTnnlDB = tunnel.TnnlDB('iTnnlDB', ingressTnnlCfgFile, ts)
     pvcDB = pvc.PvcDB('pvcDB', pvcCfgFile, ts)
-    vsDB = vs.vs('vsDB', vsCfgFile, ts)
     iTnnlDB.start()
     pvcDB.start()
-    vsDB.start()
-    iChassis = chassis.Chassis('iChassis', connFile, ts, iReport)
+    iChassis = chassis.Chassis('iChassis', 'ingress', connFile, ts, iReport)
     iChassis.start()
 
     if len(sys.argv) > 2:
-        global eTs, eTnnlDB, ePvcDB, eVsDB, eChassis
+        global eTs, eTnnlDB, ePvcDB, eChassis
         eTs = telnet.TelnetSession(sys.argv[2], globals.user, globals.password)
         eTnnlDB = tunnel.TnnlDB('eTnnlDB', egressTnnlCfgFile, eTs)
         ePvcDB = pvc.PvcDB('epvcDB', egressPvcCfgFile, eTs)
-        eVsDB = vs.vs('evsDB', egressVsCfgFile, eTs)
         eTnnlDB.start()
         ePvcDB.start()
-        eVsDB.start()
-        eChassis = chassis.Chassis('eChassis', '', eTs)
+        eChassis = chassis.Chassis('eChassis', 'egress', connFile, eTs)
         eChassis.start()
     
     if len(sys.argv) > 3:
@@ -65,16 +58,13 @@ def appIsUp(tnnlDB, pvcDB):
         elif q == globals.ConfigResult.MPLS_PVC_LBL_UPD_DONE:
             return True
 
-def ConfigApp(chassis, vsDB, tnnlDB, pvcDB):
-    vsDB.create(resultQ)
+def ConfigApp(chassis, tnnlDB, pvcDB):
     while 1:
         q = resultQ.get()
-        if q == globals.ConfigResult.VS_CFG_DONE:
-            tnnlDB.create(resultQ)
-        elif q == globals.ConfigResult.MPLS_TUNNEL_CFG_DONE:
-            pvcDB.create(resultQ)
+        if q == globals.ConfigResult.MPLS_TUNNEL_CFG_DONE:
+            pvcDB.create(resultQ, chassis)
         elif q == globals.ConfigResult.MPLS_PVC_CFG_DONE:
-            pvcDB.attach()
+            pvcDB.attach(chassis)
             break
 
     logging.debug('Finishing configuring device ' + chassis.ts.ip)
@@ -104,7 +94,7 @@ def cleanup():
         elif q == globals.ConfigResult.MPLS_DELETE_PVC_DONE:
             iTnnlDB.delete()
             break
-
+    iChassis.removeCfg()
     if eChassis:
         ePvcDB.detach(resultQ)
         while 1:
@@ -114,6 +104,7 @@ def cleanup():
             elif q == globals.ConfigResult.MPLS_DELETE_PVC_DONE:
                 eTnnlDB.delete()
                 break
+        eChassis.removeCfg()
 
 # Usage: python tunnel.py ingress [egress] [transit] 
 if __name__ == '__main__':
@@ -124,13 +115,15 @@ if __name__ == '__main__':
     if eChassis:
         print('Initializing device ' + eChassis.ts.ip + ' ...')
         eChassis.applyCfg()
-        ConfigApp(eChassis, eVsDB, eTnnlDB, ePvcDB)
+        eTnnlDB.create(resultQ)
+        ConfigApp(eChassis, eTnnlDB, ePvcDB)
     if xChassis:
         xChassis.applyCfg()
         
     print('Initializing device ' + iChassis.ts.ip + ' ...')
     iChassis.applyCfg()
-    ConfigApp(iChassis, vsDB, iTnnlDB, pvcDB)
+    iTnnlDB.create(resultQ)
+    ConfigApp(iChassis, iTnnlDB, pvcDB)
     if appIsUp(iTnnlDB, pvcDB):
         print('Device ' + iChassis.ts.ip + ' is ready')
         logging.debug('device ' + iChassis.ts.ip + ' is ready')
@@ -157,11 +150,9 @@ if __name__ == '__main__':
     iChassis.join()
     iTnnlDB.join()
     pvcDB.join()
-    vsDB.join()
     if eChassis:
         eChassis.join()
         eTnnlDB.join()
-        eVsDB.join()
         ePvcDB.join()
     if xChassis:
         xChassis.join()

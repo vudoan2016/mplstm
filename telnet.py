@@ -19,9 +19,9 @@ class TelnetSession:
         self._getHostName()
 
     def writeCmd(self, cmd):
-        # logging.debug(cmd)
+        logging.debug(cmd)
         self.l.acquire()
-        # cmd = '\n'
+        cmd = '\n'
         self.pe.sendline(cmd)
         try:
             self.pe.expect (self.prompt)

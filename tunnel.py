@@ -38,6 +38,13 @@ tunnelType = ['Dynamic|Bidir', 'Dynamic|Unidir', 'Static|Bidir', 'Static|Assoc']
 
 UPDATE_LABEL_MAX_RETRIES = 10
 
+def _procCfgLine(line):
+    return (line[0].strip(), line[1].strip(), int(line[2].strip()), 
+            line[3].strip(), line[4].strip(), line[5].strip(), 
+            line[6].strip(), line[7].strip(), line[8].strip(), 
+            line[9].strip(), line[10].strip(), line[11].strip(),
+            line[12].strip(), line[13].strip(), line[14].strip())
+
 class Tunnel:
     def __init__(self, tnnlType, fwdOutLbl, reversedInLbl, pingResult, 
                  bfdState, lblRecoveryResult, tnnlGrpResult, tnnlTypeStr):
@@ -114,42 +121,47 @@ class TnnlDB(threading.Thread):
                 continue
             path = backup = bfd = bfdProfile = reopt = fwdTnnl = ''
             reversedTnnl = backupTnnl = bwProfile = ''
-            if row[3] == 'tp-dynamic' and row[4] == 'bidirectional':
+
+            (destIP, tnnlPrefix, tnnlCnt, tnnlType, tnnlDir, path, autoBackup, bfd, 
+             bfdProfile, lspReOpt, lspReOptInterval, fwdPrefix, reversedPrefix, 
+             bkpTnnl, bwdProfile) = _procCfgLine(row)
+        
+            if tnnlType == 'tp-dynamic' and tnnlDir == 'bidirectional':
                 tnnlTypeStr = 'rsvp-ingress-corout'
                 tnnlType = TnnlType.TP_DYNAMIC_COROUT
-            if row[3] == 'tp-dynamic' and row[4] == 'unidirectional':
+            if tnnlType == 'tp-dynamic' and tnnlDir == 'unidirectional':
                 tnnlType = TnnlType.TP_DYNAMIC_UNIDIR
                 tnnlTypeStr = 'rsvp-ingress-unidir'
-            if row[3] == 'tp-static' and row[4] == 'bidirectional':
+            if tnnlType == 'tp-static' and tnnlDir == 'bidirectional':
                 tnnlType = TnnlType.TP_STATIC_COROUT
                 tnnlTypeStr = 'static-ingress-corout'
-            if row[3] == 'tp-static' and row[4] == 'associated':
+            if tnnlType == 'tp-static' and tnnlDir == 'associated':
                 tnnlType = TnnlType.TP_STATIC_ASSOC
                 tnnlTypeStr = 'static-ingress-assoc'
-            if row[3] == 'te-dynamic' and row[4] == 'unidirectional':
+            if tnnlType == 'te-dynamic' and tnnlDir == 'unidirectional':
                 tnnlTypeStr = 'rsvp-ingress'
                 tnnlType = TnnlType.TE_DYNAMIC_UNIDIR
 
-            if row[5]:
-                path = ' explicit-tunnel-path ' + row[5]
-            if row[6] == 'enabled':
+            if path:
+                path = ' explicit-tunnel-path ' + path
+            if autoBackup == 'enabled':
                 backup = ' auto-backup on' 
-            if row[7] == 'enabled':
+            if bfd == 'enabled':
                 bfd = ' bfd-monitor enable'
-            if row[8]:
-                bfdProfile = ' bfd-profile ' + row[8]
-            if row[9] == 'enabled':
-                reopt = ' lsp-reopt enable lsp-reopt-interval ' + row[10]
-            if row[11]:
-                fwdTnnl = ' forward-tunnel ' + row[11]
-            if row[12]:
-                reversedTnnl = ' reverse-dyntun-name ' + row[12]
-            if row[13]:
-                backupTnnl = ' backup-tunnel ' + row[13]
-            if row[14]:
-                bwProfile = ' bandwidth-profile ' + row[14]
+            if bfdProfile:
+                bfdProfile = ' bfd-profile ' + bfdProfile
+            if lspReOpt == 'enabled':
+                reopt = ' lsp-reopt enable lsp-reopt-interval ' + lspReOptInterval
+            if fwdPrefix:
+                fwdTnnl = ' forward-tunnel ' + fwdPrefix
+            if reversedPrefix:
+                reversedTnnl = ' reverse-dyntun-name ' + reversedPrefix
+            if bkpTnnl:
+                backupTnnl = ' backup-tunnel ' + bkpTnnl
+            if bwdProfile:
+                bwProfile = ' bandwidth-profile ' + bwdProfile
                 
-            self.cfg.append(tuple((row[0], row[1], int(row[2]), tnnlType, 
+            self.cfg.append(tuple((destIP, tnnlPrefix, tnnlCnt, tnnlType, 
                                    tnnlTypeStr, path, backup, bfd, bfdProfile, 
                                    reopt, fwdTnnl, reversedTnnl, backupTnnl, 
                                    bwProfile)))

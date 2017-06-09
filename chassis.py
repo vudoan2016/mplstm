@@ -21,10 +21,11 @@ class ChassisOperation(Enum):
     PORT_TOGGLE              = 8
 
 class Chassis(threading.Thread):
-    def __init__(self, name, cfgFile, telnetSession, reportFile=None):
+    def __init__(self, name, role, cfgFile, telnetSession, reportFile=None):
         threading.Thread.__init__(self)
         self.workRequestQ = Queue.Queue()
-        self.name =  name
+        self.name = name
+        self.role = role
         self.ts = telnetSession
         self.setDaemon(1)
         self.result = []
@@ -39,31 +40,24 @@ class Chassis(threading.Thread):
     def applyCfg(self):
         self.workRequestQ.put((ChassisOperation.CHASSIS_APPLY_CONFIG, 
                                None, None, None))
-
     def removeCfg(self):
         self.workRequestQ.put((ChassisOperation.CHASSIS_REMOVE_CONFIG, 
                                None, None, None))
-
     def portToggle(self, tnnlDB, pvcDB):
         self.workRequestQ.put((ChassisOperation.PORT_TOGGLE, 
                                None, tnnlDB, pvcDB))
-        
     def lmRestart(self, tnnlDB, pvcDB):
         self.workRequestQ.put((ChassisOperation.LM_RESTART, 
                                None, tnnlDB, pvcDB))
-
     def gracefulRestart(self, resultQ, tnnlDB, pvcDB):
         self.workRequestQ.put((ChassisOperation.PERFORM_GRACEFUL_RESTART, 
                                resultQ, tnnlDB, pvcDB))
-
     def verifyGRSummary(self):
         self.workRequestQ.put((ChassisOperation.VERIFY_GR_LABEL_RECOVERY, 
                                None, None, None))
-
     def report(self):
         self.workRequestQ.put((ChassisOperation.CHASSIS_REPORT, 
                                None, None, None))
-
     def run(self):
         while 1:
             q, resultQ, tnnlDB, pvcDB = self.workRequestQ.get()
@@ -98,17 +92,43 @@ class Chassis(threading.Thread):
                 continue
             if not len(row):
                 continue # skip blank lines
+                
+            self.iAcPort = row[0]
+            self.eAcPort = row[5]
+            self.iport = row[1]
+            self.eport = row[4]
+            if self.iport[1] == '/':
+                self.islot = 'LM' + self.iport[0]
+            else:
+                self.islot = 'LM' + self.iport[0:1]
+            if self.eport[1] == '/':
+                self.eslot = 'LM' + self.eport[0]
+            else:
+                self.eslot = 'LM' + self.eport[0:1]
+            self.vlan = int(row[6])
+            self.vlanCount = int(row[7])
 
-            self.iport = row[0]
-            self.eport = row[3]
-            if row[0][1] == '/':
-                self.islot = 'LM' + row[0][0]
-            else:
-                self.islot = 'LM' + row[0][0:1]
-            if row[3][1] == '/':
-                self.eslot = 'LM' + row[3][0]
-            else:
-                self.eslot = 'LM' + row[3][0:1]
+    def _createVS(self):
+        for i in range(self.vlanCount):
+            self.ts.writeCmd('virtual-switch create vs ' + 'vs' + str(self.vlan + i))
+
+    def _createACSubport(self):
+        if self.role == 'ingress':
+            port = self.iAcPort
+        else:
+            port = self.eAcPort
+        for i in range(self.vlanCount):
+            self.ts.writeCmd('sub-port create sub-port ac-' + str(self.vlan + i) + 
+                             ' parent-port ' + port + ' classifier-precedence ' + 
+                             str(self.vlan + i))
+            self.ts.writeCmd('sub-port add sub-port ' + 'ac-' + str(self.vlan + i) +
+                             ' vtag-stack ' + str(self.vlan + i))
+
+    def _attachACSubport(self):
+        for i in range(self.vlanCount):
+            self.ts.writeCmd('virtual-switch interface attach sub-port ' + 
+                             'ac-' + str(self.vlan + i) + ' vs ' + 'vs' + 
+                             str(self.vlan + i))
 
     def _applyCfg(self):
         logging.debug('Start applying global config ...')
@@ -120,9 +140,17 @@ class Chassis(threading.Thread):
         self.ts.writeCmd('ldp graceful-restart set reconnect-time 300')
         self.ts.writeCmd('ldp graceful-restart set recovery-time  360')
         self.ts.writeCmd('mpls tunnel-bandwidth-profile create bandwidth-profile xyz bandwidth 1000000')
+        self._createVS()
+        self._createACSubport()
+        self._attachACSubport()
 
-    def _removeCfg():
+    def _removeCfg(self):
         logging.debug('Start removing global config ...')
+        for i in range(self.vlanCount):
+            self.ts.writeCmd('virtual-switch interface detach sub-port ' + 
+                             'ac-' + str(self.vlan + i))
+            self.ts.writeCmd('sub-port delete sub-port ac-' + str(self.vlan + i)) 
+            self.ts.writeCmd('virtual-switch delete vs ' + 'vs' + str(self.vlan + i))
 
     def _gracefulRestart(self, resultQ, tnnlDB, pvcDB):
         logging.debug('Performing graceful restart ...')
@@ -180,9 +208,9 @@ class Chassis(threading.Thread):
         cmd = 'rsvp-te graceful-restart show history'
         result = self.ts.writeCmd(cmd)
 
-        searchObj = re.search(r'(Last RSVP GR Start Date)\s+\|(.*\s+[^\|])', result)
+        searchObj = re.search(r'Last RSVP GR Start Date.*', result)
         if searchObj:
-            startTime = searchObj.group(2).strip()
+            startTime = searchObj.group(0).split('|')
             logging.debug(startTime)
 
         searchObj = re.search(r'(recovered succesfully)\s+\|(\d+)', result)

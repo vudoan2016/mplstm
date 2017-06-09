@@ -22,11 +22,10 @@ PW_MAX_ID = 0x7FFFFFF
 PW_MAX_RETRIES = 60
 
 class Pvc:
-    def __init__(self, pwid, virtualSwitch, pingStatus):
+    def __init__(self, pwid, pingStatus):
         self.pwid = pwid
         self.inLbl = -1
         self.outLbl = -1
-        self.virtualSwitch = virtualSwitch
         self.pingStatus = pingStatus
 
 class PvcDB(threading.Thread):
@@ -41,36 +40,36 @@ class PvcDB(threading.Thread):
         self.pvcDB = {} # dictionary of PVCs
         self._readCfg()
 
-    def create(self, resultQ):
-        self.workRequestQ.put((PVCWorkReq.PVC_CREATE_REQ, resultQ, None))
+    def create(self, resultQ, chassis):
+        self.workRequestQ.put((PVCWorkReq.PVC_CREATE_REQ, resultQ, None, chassis))
 
     def delete(self, resultQ):
-        self.workRequestQ.put((PVCWorkReq.PVC_DELETE_REQ, resultQ, None))
+        self.workRequestQ.put((PVCWorkReq.PVC_DELETE_REQ, resultQ, None, None))
 
-    def attach(self):
-        self.workRequestQ.put((PVCWorkReq.PVC_ATTACH_REQ, None, None))
+    def attach(self, chassis):
+        self.workRequestQ.put((PVCWorkReq.PVC_ATTACH_REQ, None, None, chassis))
 
     def detach(self, resultQ):
-        self.workRequestQ.put((PVCWorkReq.PVC_DETACH_REQ, resultQ, None))
+        self.workRequestQ.put((PVCWorkReq.PVC_DETACH_REQ, resultQ, None, None))
 
     def updateLabel(self, resultQ):
-        self.workRequestQ.put((PVCWorkReq.PVC_UPD_LBL_REQ, resultQ, None))
+        self.workRequestQ.put((PVCWorkReq.PVC_UPD_LBL_REQ, resultQ, None, None))
         
     def verifyPing(self, resultQ=None):
-        self.workRequestQ.put((PVCWorkReq.PVC_VERIFY_PNG_REQ, resultQ, None))
+        self.workRequestQ.put((PVCWorkReq.PVC_VERIFY_PNG_REQ, resultQ, None, None))
 
     def report(self, reportFile):
-        self.workRequestQ.put((PVCWorkReq.PVC_CREATE_REPORT, None, reportFile))
+        self.workRequestQ.put((PVCWorkReq.PVC_CREATE_REPORT, None, reportFile, None))
 
     def run(self):
         while 1:
-            q, resultQ, reportFile = self.workRequestQ.get()
+            q, resultQ, reportFile, chassis = self.workRequestQ.get()
             if q == PVCWorkReq.PVC_CREATE_REQ:
                 self._create(resultQ)
             elif q == PVCWorkReq.PVC_DELETE_REQ:
                 self._delete(resultQ)
             if q == PVCWorkReq.PVC_ATTACH_REQ:
-                self._attach()
+                self._attach(chassis)
             elif q == PVCWorkReq.PVC_DETACH_REQ:
                 self._detach(resultQ)
             elif q == PVCWorkReq.PVC_UPD_LBL_REQ:
@@ -85,17 +84,26 @@ class PvcDB(threading.Thread):
         csvReader = csv.reader(pvcCfgFile)
         next(csvReader, None)
         for row in csvReader:
-            if row[3] == 'dynamic':
+            if row[3].strip() == 'dynamic':
                 pvcType = 'dynamic-vc '
-            if row[5] == 'static-associated':
+            if row[5].strip() == 'static-associated':
                 tnnlType = 'tp-tunnel-assoc '
-            elif row[5] == 'dynamic-corout':
+            elif row[5].strip() == 'dynamic-corout':
                 tnnlType = 'tp-tunnel-ingr-corout '
-            elif row[5] == 'te':
+            elif row[5].strip() == 'te':
                 tnnlType = 'te-tunnel '
-            self.cfg.append(tuple((row[0], row[1], int(row[2]), 
-                                   pvcType, tnnlType, row[6], row[7], row[8],
-                                   row[9], row[10], row[11], row[12], row[13])))
+            self.cfg.append(tuple((row[0].strip(),      # destination IP
+                                   row[1].strip(),      # PVCNamePrefix
+                                   int(row[2].strip()), # PVCCount
+                                   pvcType, 
+                                   tnnlType, 
+                                   row[6].strip(),      # TunnelPrefix
+                                   row[7].strip(),      # fec-129
+                                   row[8].strip(),      # agi
+                                   row[9].strip(),      # saii
+                                   row[10].strip(),     # taii
+                                   row[11].strip(),     # status-tlv
+                                   row[12].strip())))   # bw
         pvcCfgFile.close()
 
     def _getExistingPVC(self):
@@ -121,33 +129,31 @@ class PvcDB(threading.Thread):
             for i in range(1, cfg[2]+1):
                 pvcName = cfg[1] + str(i)
                 if pvcName in existingPVC:
-                    pvc = Pvc(0, cfg[6]+str(i), 'Failed')
+                    pvc = Pvc(0, 'Failed')
                     self.pvcDB[pvcName] = pvc
                     continue
 
                 cmd = 'mpls l2-vpn create ' + cfg[3] + pvcName
-                if cfg[7] == 'enabled':
-                    cmd += ' fec-129' + ' agi ' + cfg[8] + str(i) + ' saii ' \
-                           + cfg[9] + str(i) + ' taii ' + cfg[10] + str(i)
+                if cfg[6] == 'enabled':
+                    cmd += ' fec-129' + ' agi ' + cfg[7] + str(i) + ' saii ' \
+                           + cfg[8] + str(i) + ' taii ' + cfg[9] + str(i)
                 else:
                     cmd += ' pw-id ' + self._getPWId(pvcName)
                 cmd += ' peer ' + cfg[0] + ' '
                 cmd += cfg[4] + cfg[5] + str(i) 
                 # status-tlv option
-                if cfg[11] == 'enabled':
+                if cfg[10] == 'enabled':
                     cmd += ' status-tlv on'
-                if cfg[12]:
-                    cmd += ' bandwidth ' + cfg[12]
+                if cfg[11]:
+                    cmd += ' bandwidth ' + cfg[11]
 
                 result = self.ts.writeCmd(cmd)
                 if 'FAILURE' in result:
                     logging.debug(result)
                 else:
-                    pvc = Pvc(0, cfg[6]+str(i), 'Failed')
+                    pvc = Pvc(0, 'Failed')
                     self.pvcDB[pvcName] = pvc
         resultQ.put(globals.ConfigResult.MPLS_PVC_CFG_DONE)
-        # attach pvc to virtual-switch
-        self.workRequestQ.put((PVCWorkReq.PVC_ATTACH_REQ, None, None))
 
     def _delete(self, resultQ):
         for pvcName, pvc in self.pvcDB.items():
@@ -156,10 +162,12 @@ class PvcDB(threading.Thread):
             del self.pvcDB[pvcName]
         resultQ.put(globals.ConfigResult.MPLS_DELETE_PVC_DONE)
 
-    def _attach(self):
+    def _attach(self, chassis):
+        vlanId = 0
         for pvcName, pvc in self.pvcDB.items():
             cmd = 'virtual-switch interface attach mpls-vc '
-            cmd += pvcName + ' vs ' + pvc.virtualSwitch
+            cmd += pvcName + ' vs ' + 'vs' + str(chassis.vlan + vlanId)
+            vlanId += 1
             self.ts.writeCmd(cmd)
 
     def _detach(self, resultQ):

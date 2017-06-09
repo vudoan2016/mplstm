@@ -1,7 +1,7 @@
-DestIP,TunnelNamePrefix,TunnelCount,TunnelType,TunnelDir,ExplicitPath,AutoBackup,BfdMonitor,BfdProfile,LspReopt,LspReoptInterval,fwdTunnelPrefix,ReversedTunnelPrefix,BackupTunnel,bandwidthProfile
-1.1.1.1,te-a-b,5,te-dynamic,unidirectional,,disabled,disabled,,disabled,0,,,,xyz
-1.1.1.1,te-a-b-bkp,5,te-dynamic,unidirectional,,disabled,disabled,,disabled,0,,,te-a-b,xyz
-1.1.1.1,te-a-b,0,te-dynamic,unidirectional,path-a-c-b,disabled,disabled,,disabled,0,,,,xyz
+ DestIP, Prefix, count,       type,      TunnelDir, path, AutoBackup, BfdMonitor, BfdProfile,    reopt, reoptInterval, fwdPrefix, ReversedPrefix, BackupTunnel, bwProfile
+4.4.4.4,     te,     5, te-dynamic, unidirectional,     ,   disabled,   disabled,           , disabled,             0,          ,               ,             , xyz
+4.4.4.4, te-exp,     0, te-dynamic, unidirectional, path,   disabled,   disabled,           , disabled,             0,          ,               ,             , xyz
+4.4.4.4,te-a-b-bkp,0,te-dynamic,unidirectional,,disabled,disabled,,disabled,0,,,te-a-b,xyz
 4.4.4.4,te-a-b-bkp,0,te-dynamic,unidirectional,path-a-c-b,disabled,disabled,,disabled,0,,,te-a-b,xyz
 4.4.4.4,te-a-b,0,te-dynamic,unidirectional,path-a-c-b,disabled,disabled,,disabled,0,,,,xyz
 3.3.3.3,i-dyn-unidir-pri,0,dynamic,unidirectional,,disabled,disabled,,disabled,0,,,,xyz

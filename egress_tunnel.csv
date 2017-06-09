@@ -1,7 +1,7 @@
 DestIP,TunnelNamePrefix,TunnelCount,TunnelType,TunnelDir,ExplicitPath,AutoBackup,BfdMonitor,BfdProfile,LspReopt,LspReoptInterval,fwdTunnelPrefix,ReversedTunnelPrefix,BackupTunnel,bwProfile
 3.3.3.3,te-b-a,5,te-dynamic,unidirectional,,disabled,disabled,,disabled,0,,,,xyz
-3.3.3.3,te-b-a-bkp,5,te-dynamic,unidirectional,,disabled,disabled,,disabled,0,,,te-b-a,xyz
-3.3.3.3,te-b-a,0,te-dynamic,unidirectional,path-b-c-a,disabled,disabled,,disabled,0,,,,xyz
+3.3.3.3,te-b-a-exp,0,te-dynamic,unidirectional,path-b-c-a,disabled,disabled,,disabled,0,,,,xyz
+3.3.3.3,te-b-a-bkp,0,te-dynamic,unidirectional,,disabled,disabled,,disabled,0,,,te-b-a,xyz
 3.3.3.3,te-b-a-bkp,0,te-dynamic,unidirectional,path-b-c-a,disabled,disabled,,disabled,0,,,te-b-a,xyz
 3.3.3.3,te-b-a,0,te-dynamic,unidirectional,path-b-c-a,disabled,disabled,,disabled,0,,,,xyz
 1.1.1.1,e-dyn-unidir-pri,0,dynamic,unidirectional,,disabled,disabled,,disabled,0,,,,xyz
