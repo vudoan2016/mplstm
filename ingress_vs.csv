@@ -1,3 +1,0 @@
-DestIP,Virtual-switchNamePrefix,vsCount,pvcNamePrefix
-1.1.1.1,vs-grp-mpls,0,grp-dvc
-3.3.3.3,vs100,5,a-b
