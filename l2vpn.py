@@ -80,6 +80,8 @@ class L2vpnAgent:
       else:
          self.pwMode = 'mesh'
       self.pwPrefix = 'pw'
+      for i in range(startId, startId+count):
+        pseudowires[] = {}
 
    def config(self, cmd):
       logging.debug(cmd)
@@ -276,6 +278,21 @@ class L2vpnAgent:
             print('\tInstance %d is not downloaded to DP' % i)
          if instanceId:
             break
+
+def query(dut, cmd):
+  logging.debug(cmd)
+  dut.yp.sendline(cmd)
+  dut.yp.expect(self.dut.ypPrompt)
+  return dut.yp.before 
+
+def stateUpdate():
+  result = query("sget /pseudowires-state")
+      
+  result = result[result.index('{'):]
+  start = result.index('[')
+  stop = result.index(']')
+  print(result[start:stop+1])
+  print(json.loads(result[start:stop+1]))
 
 if __name__ == '__main__':
    l2vpnInstCount = 100 
