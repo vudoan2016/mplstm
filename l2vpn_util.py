@@ -3,41 +3,29 @@ import pexpect
 import sys
 import logging
 
-def hostShell(ipAddr):
-    s = pexpect.spawn("ssh diag@" + ipAddr)
-    #s.logfile_read = sys.stdout
-    try:
-        s.expect("\$", timeout=1)
-    except:
-        try:
-            s.expect("password:", timeout=1)
-            s.sendline("diag")
-            s.expect("\$", timeout=1)
-        except:
-            print('Unable to log in to %s' % ipAddr)
-    return s
-
-def imiShell(ipAddr):
-    logging.debug('Connecting to IMI shell ...')
-    s = hostShell(ipAddr)
-    s.sendline("docker exec -it cn_ipservices_1 bash")
-    s.sendline()
-    s.expect("#", timeout=1)
-    s.sendline("imish")
-    s.expect(">", timeout=1)
-    s.sendline("ena")
-    s.expect("#", timeout=1)
-    return s
-
 def ypShell(ipAddr):
+    connected = False
     logging.debug('Connecting to YP shell ...')
     s = pexpect.spawn("ssh diag@" + ipAddr + " -p 830")
     #s.logfile_read = sys.stdout
-    s.expect ("password:", timeout=1)
-    s.sendline("ciena123")
-    s.expect(">", timeout=1)
-    s.sendline("diag shell")
-    s.expect("\$", timeout=1)
-    s.sendline("yp-shell")
-    s.expect('>', timeout=1)
-    return s
+    try:
+        s.expect ("password:", timeout=1)
+        s.sendline("ciena123")
+        try:
+            s.expect(">", timeout=1)
+            s.sendline("diag shell")
+            try:
+                s.expect("\$", timeout=1)
+                s.sendline("yp-shell")
+                try:
+                    s.expect('>', timeout=2)
+                    connected = True
+                except:
+                    print('Unable to bring up the yp-shell')
+            except:
+                print('Unable to enter diag mode')
+        except:
+            print('Password is not accepted')
+    except:
+        print('Unable to connect to the yp-shell')
+    return (s, connected)
